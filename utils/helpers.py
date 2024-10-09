@@ -31,11 +31,10 @@ def load_all_scene_configs():
     all_scene_configs = {}
 
     # 搜索目录下的所有json文件
-    for file_path in glob.glob("scene_config/**/*.json", recursive=True):
+    for file_path in glob.glob("../scene_config/conf/xiaorui_tasks.json", recursive=True):
         current_config = load_scene_templates(file_path)
 
         for key, value in current_config.items():
-            # todo 可以有加载优先级
             # 只有当键不存在时，才添加到all_scene_configs中
             if key not in all_scene_configs:
                 all_scene_configs[key] = value
@@ -45,7 +44,7 @@ def load_all_scene_configs():
 
 def send_message(message, user_input):
     """
-    请求chatGPT函数
+    请求LLM
     """
     print('--------------------------------------------------------------------')
     if config.DEBUG:
@@ -53,32 +52,33 @@ def send_message(message, user_input):
     elif user_input:
         print('用户输入:', user_input)
     print('----------------------------------')
+    full_url = "https://api.3ren.cn/ai-paas-platform/ai/base/chat";
     headers = {
-        "Authorization": f"Bearer {config.API_KEY}",
         "Content-Type": "application/json",
+        "appCode": "test-only",
+        "appToken": "SEysWctCnOIRkkzvhtm3mfcHmU5",
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
     }
-
-    data = {
-        "model": config.MODEL,
+    payload = json.dumps({
+        # "maxNewTokens": 1024,
         "messages": [
-            {"role": "system", "content": config.SYSTEM_PROMPT},
-            {"role": "user", "content": f"{message}"}
-        ]
-    }
-
+            {
+                "content": message,
+                "role": "user"
+            }
+        ],
+        "sendFinishFlag": True,
+        "sensitive": "",
+        "theme": ""
+    })
+    response = requests.post(full_url, headers=headers, data=payload)
     try:
-        response = requests.post(config.GPT_URL, headers=headers, json=data, verify=False)
-        if response.status_code == 200:
-            answer = response.json()["choices"][0]["message"]['content']
-            print('LLM输出:', answer)
-            print('--------------------------------------------------------------------')
-            return answer
-        else:
-            print(f"Error: {response.status_code}")
-            return None
-    except requests.RequestException as e:
-        print(f"Request error: {e}")
-        return None
+        answer = response.json()["data"]
+        print("message:", answer)
+        return answer
+    except Exception as e:
+        print(response.text)
+        print("paas接口调用异常")
 
 
 def is_slot_fully_filled(json_data):
@@ -88,7 +88,7 @@ def is_slot_fully_filled(json_data):
     # 遍历JSON数据中的每个元素
     for item in json_data:
         # 检查value字段是否为空字符串
-        if item.get('value') == '':
+        if json_data[item] == '':
             return False  # 如果发现空字符串，返回False
     return True  # 如果所有value字段都非空，返回True
 
@@ -97,15 +97,35 @@ def get_raw_slot(parameters):
     # 创建新的JSON对象
     output_data = []
     for item in parameters:
-        new_item = {"name": item["name"], "desc": item["desc"], "type": item["type"], "value": ""}
+        new_item = {"name": item["name"], "desc": item["desc"], "must_required": item["must_required"], "values_list": item["values_list"]}
         output_data.append(new_item)
     return output_data
 
+def get_slot_info(parameters):
+    # 创建新的JSON对象
+    index = 1
+    slot_info_str = ""
+    for item in parameters:
+        if len(item["values_list"]) > 0:
+            slot_info_str += str(index) + ". " + item["desc"] + ", 从以下选项中选择：" + ", ".join(item["values_list"]) + "\n"
+        else:
+            slot_info_str += str(index) + ". " + item["desc"] + "\n"
+        index += 1
+    return slot_info_str
+
+def get_slot_template(parameters):
+    # 创建新的JSON对象
+    output_data = {}
+    slot_dict = {}
+    for item in parameters:
+        slot_dict[item["desc"]] = ""
+    output_data["result"] = slot_dict
+    return output_data
 
 def get_dynamic_example(scene_config):
     # 创建新的JSON对象
-    if 'example' in scene_config:
-        return scene_config['example']
+    if 'expert_examples' in scene_config:
+        return scene_config['expert_examples']
     else:
         return '答：{"name":"xx","value":"xx"}'
 
@@ -114,7 +134,7 @@ def get_slot_update_json(slot):
     # 创建新的JSON对象
     output_data = []
     for item in slot:
-        new_item = {"name": item["name"], "desc": item["desc"], "value": item["value"]}
+        new_item = {"name": item["name"], "desc": item["desc"], "value": ""}
         output_data.append(new_item)
     return output_data
 
@@ -183,6 +203,10 @@ def extract_json_from_string(input_string):
         print(f"Error occurred: {e}")
         return []
 
+def extract_talk(input_str):
+    pattern = re.compile(r'{[\s\S]*}')
+    matches = pattern.findall(input_str)
+    return matches[0]
 
 def fix_json(bad_json):
     # 首先，用双引号替换掉所有的单引号
