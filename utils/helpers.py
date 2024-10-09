@@ -52,12 +52,8 @@ def send_message(message, user_input):
     elif user_input:
         print('用户输入:', user_input)
     print('----------------------------------')
-    full_url = "https://api.3ren.cn/ai-paas-platform/ai/base/chat";
+    full_url = "";
     headers = {
-        "Content-Type": "application/json",
-        "appCode": "test-only",
-        "appToken": "SEysWctCnOIRkkzvhtm3mfcHmU5",
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
     }
     payload = json.dumps({
         # "maxNewTokens": 1024,
